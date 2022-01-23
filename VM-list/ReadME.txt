@@ -95,8 +95,9 @@ def vm_list():
                         vm_ips = []
                         if tools_status == 'toolsOk' or tools_status == 'toolsOld':
                             for nic in vm.guest.net:
-                                for addr in nic.ipConfig.ipAddress:
-                                    vm_ips.append(addr.ipAddress)
+                                if hasattr(nic, 'ipConfig') and hasattr(nic.ipConfig, 'ipAddress'):
+                                    for addr in nic.ipConfig.ipAddress:
+                                        vm_ips.append(addr.ipAddress)
                         else:
                             vm_ips = "none"
                         dataframe[vcenter]["DataCenter"].append(dc_name)
