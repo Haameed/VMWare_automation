@@ -13,7 +13,7 @@ from datetime import datetime
 
 file_name = f'vm_list_{datetime.now().strftime("%Y-%m-%d")}.xlsx'
 def vm_list():
-    vcenters = ["vcsa-1", "vcsa-2", "vcsa-3", "vcsa-4"]
+    vcenters = ["vcsa-hq", "vcsa-gorgan", "vcsa-datacenter", "vcsa-yara"]
     writer = pd.ExcelWriter(file_name, engine='xlsxwriter')
     dataframe = {}
     for vcenter in vcenters:
@@ -28,8 +28,8 @@ def vm_list():
                               "Power_status": [], "Is_template": [], "Number of CPUs": [],
                               "CPU_Cores": [], "Total CPU": [], "CPU Hot_add": [], "Memory GB": [],
                               "Memory Hot_add": [],
-                              "VM_Tools Version": [], "virtual_disks": [], "datastore list": [], "Ethernet list": [],
-                              "Total allocated disk": [],
+                              "VM_Tools Version": [], "virtual_disks": [], "datastore list": [],
+                              "Thick Disks": [],"Ethernet list": [], "Total allocated disk": [],
                               "Network Count": [], "networks_name": [], "tools_installType": [],
                               "tools_runningStatus": [],
                               "tools_status": [], "tools_version": [], "tools_versionStatus": [],
@@ -68,10 +68,13 @@ def vm_list():
                         vm_id = str(vm).split(":")[1].replace("'", "")
                         datastores_list = ""
                         ethernets_list = ""
+                        thick_list = ""
                         totalAllocatedDisk= 0
                         for device in vm.config.hardware.device:
                             if isinstance(device, vim.vm.device.VirtualDisk):
-                                datastores_list += f"({device.deviceInfo.label}, {device.backing.datastore.name}, {round(device.capacityInKB / 1024 / 1024)}),"
+                                datastores_list += f"({device.deviceInfo.label}, {device.backing.datastore.name}, {round(device.capacityInKB / 1024 / 1024)} GB),"
+                                if not device.backing.thinProvisioned:
+                                    thick_list += f"({device.deviceInfo.label})"
                                 totalAllocatedDisk = totalAllocatedDisk + device.capacityInKB
                             elif isinstance(device, vim.vm.device.VirtualVmxnet3):
                                 ethernets_list += f"({device.deviceInfo.label}, {device.macAddress}, connected = {device.connectable.connected} , wakeOnLanEnabled = {device.wakeOnLanEnabled}),"
@@ -97,9 +100,12 @@ def vm_list():
                             for nic in vm.guest.net:
                                 if hasattr(nic, 'ipConfig') and hasattr(nic.ipConfig, 'ipAddress'):
                                     for addr in nic.ipConfig.ipAddress:
-                                        vm_ips.append(addr.ipAddress)
+                                        if hasattr(addr, 'ipAddress'):
+                                            vm_ips.append(addr.ipAddress)
                         else:
                             vm_ips = "none"
+                        if not thick_list:
+                            thick_list = "N/A"
                         dataframe[vcenter]["DataCenter"].append(dc_name)
                         dataframe[vcenter]["Cluster"].append(cluster_name)
                         dataframe[vcenter]["Host"].append(host_name)
@@ -116,6 +122,7 @@ def vm_list():
                         dataframe[vcenter]["VM_Tools Version"].append(vm_tools)
                         dataframe[vcenter]["virtual_disks"].append(virtual_disks)
                         dataframe[vcenter]["datastore list"].append(datastores_list)
+                        dataframe[vcenter]["Thick Disks"].append(thick_list)
                         dataframe[vcenter]["Total allocated disk"].append(totalAllocatedDisk)
                         # dataframe[vcenter]["VM Path"].append(vm_path_name)
                         dataframe[vcenter]["Network Count"].append(ethernet_cards)
@@ -135,7 +142,7 @@ def vm_list():
 
 
         df = pd.DataFrame(dataframe[vcenter])
-        df.to_excel(writer, sheet_name=vcenter, index=False, encoding='utf-8')
+        df.to_excel(writer, sheet_name=vcenter, index=False, encoding='utf-8',freeze_panes=(1,4))
         workbook = writer.book
         worksheet = writer.sheets[vcenter]
         header_format = workbook.add_format({
@@ -157,7 +164,7 @@ def vm_list():
     writer.save()
 
 def send_mail(contact , body):
-    sender_email = "automation@mycompany.com"
+    sender_email = "automation@alibaba.ir"
     receiver_email = contact
 
     msg = MIMEMultipart()
@@ -170,11 +177,11 @@ def send_mail(contact , body):
     encoders.encode_base64(part)
     part.add_header('content-disposition', 'attachment', filename=file_name)
     msg.attach(part)
-    with smtplib.SMTP('webmail.mycompany.ir', 25) as smtpObj:
+    with smtplib.SMTP('webmail.alibaba.ir', 25) as smtpObj:
         smtpObj.ehlo()
-        smtpObj.starttls()
+        # smtpObj.starttls()
         smtpObj.sendmail(sender_email, receiver_email, msg.as_string())
 
 if __name__ == "__main__":
     vm_list()
-    send_mail("virtualization@mycompany.com", "Dear colleagues,\n Please find th attachment for VM list from all vCenters")
+    send_mail("virtualization@alibaba.ir", "Dear colleagues,\n Please find th attachment for VM list from all vCenters")
